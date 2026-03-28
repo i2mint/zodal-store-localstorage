@@ -9,8 +9,8 @@ This package implements `DataProvider<T>` from `@zodal/store`, storing items as 
 ## Skills
 
 Before making changes, read the zodal store adapter skill for patterns and conventions:
-- **Store adapter guide**: `/Users/thorwhalen/Dropbox/py/proj/i/zodal/.claude/skills/zodal-store-adapter/SKILL.md`
-- **zodal architecture**: `/Users/thorwhalen/Dropbox/py/proj/i/zodal/docs/architecture.md`
+- **Store adapter guide**: https://github.com/i2mint/zodal/tree/main/.claude/skills/zodal-store-adapter
+- **zodal architecture**: https://github.com/i2mint/zodal/tree/main/docs/architecture.md
 
 ## Build & Test
 
