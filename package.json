@@ -16,7 +16,9 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -38,5 +40,12 @@
     "type": "git",
     "url": "https://github.com/i2mint/zodal-store-localstorage.git"
   },
-  "keywords": ["zodal", "dataprovider", "localstorage", "storage", "adapter"]
+  "keywords": [
+    "zodal",
+    "dataprovider",
+    "localstorage",
+    "storage",
+    "adapter"
+  ],
+  "packageManager": "pnpm@9.15.0"
 }
