@@ -9,11 +9,11 @@ importers:
   .:
     devDependencies:
       '@zodal/core':
-        specifier: ^0.1.0
-        version: 0.1.0(zod@4.3.6)
+        specifier: ^0.2.0
+        version: 0.2.0(zod@4.3.6)
       '@zodal/store':
-        specifier: ^0.1.0
-        version: 0.1.0(zod@4.3.6)
+        specifier: ^0.2.0
+        version: 0.2.0(zod@4.3.6)
       jsdom:
         specifier: ^26.0.0
         version: 26.1.0
@@ -392,13 +392,13 @@ packages:
   '@vitest/utils@3.2.4':
     resolution: {integrity: sha512-fB2V0JFrQSMsCo9HiSq3Ezpdv4iYaXRG1Sx8edX3MwxfyNn83mKiGzOcH+Fkxt4MHxr3y42fQi1oeAInqgX2QA==}
 
-  '@zodal/core@0.1.0':
-    resolution: {integrity: sha512-ayxligKciL4gP2fyfxh2dEbqM391pyFzCBKcsEoxHndbcg2GguQvI/taBcK6L+An1Jcei0QJtUy0BnBNoxxZDQ==}
+  '@zodal/core@0.2.0':
+    resolution: {integrity: sha512-FYZ6DNQMz9z4j+6aEjw/hrJKlnlpznBe88Z/qca5cEVkkVh3jaeQPZo22ROgimI5qWWz7UQmXduBtRoNncDUgw==}
     peerDependencies:
       zod: ^3.24.0 || ^4.0.0
 
-  '@zodal/store@0.1.0':
-    resolution: {integrity: sha512-IUFt+n3/XPIEATc3+liSlwC1l71TZ3gwTtfe64ALWOJtHnTMX6FAc/6OZJ8Hr6Yh8sWKJQrugMVa+4ouQ/cI+g==}
+  '@zodal/store@0.2.0':
+    resolution: {integrity: sha512-CwfvGtRXUjpsdTI48G0H0CnoKKg2w/XE1PO2wENzPk9b/j7joBJygKR0vEZC+qGaw4KSdf7Q4nd5fY0wWYQJig==}
     peerDependencies:
       zod: ^3.24.0 || ^4.0.0
 
@@ -1135,13 +1135,13 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
-  '@zodal/core@0.1.0(zod@4.3.6)':
+  '@zodal/core@0.2.0(zod@4.3.6)':
     dependencies:
       zod: 4.3.6
 
-  '@zodal/store@0.1.0(zod@4.3.6)':
+  '@zodal/store@0.2.0(zod@4.3.6)':
     dependencies:
-      '@zodal/core': 0.1.0(zod@4.3.6)
+      '@zodal/core': 0.2.0(zod@4.3.6)
       zod: 4.3.6
 
   acorn@8.16.0: {}
