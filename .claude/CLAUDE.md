@@ -6,6 +6,11 @@ A zodal DataProvider adapter for browser localStorage.
 
 This package implements `DataProvider<T>` from `@zodal/store`, storing items as a JSON array in browser localStorage. All query operations are client-side.
 
+- Client-side query through `applyQuery()` from `@zodal/store`
+- `create` with an existing id rejects; `upsert` overwrites
+- A stored value that is not a JSON array throws `LocalStorageCorruptError` on every read and write and is never overwritten (only a missing or empty key reads as `[]`)
+- `createBrowserBifurcatedProvider` delegates listing to the localStorage provider; its bulk update/delete skip missing ids
+
 ## Skills
 
 Before making changes, read the zodal store adapter skill for patterns and conventions:
@@ -19,3 +24,5 @@ pnpm install
 pnpm build
 pnpm test
 ```
+
+`tests/contract.test.ts` runs the shared `@zodal/store/testing` conformance kit against the localStorage provider and the browser bifurcated provider with no content fields (the IndexedDB providers are not exercised: jsdom has no IndexedDB).

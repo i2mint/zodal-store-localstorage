@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createLocalStorageProvider } from '../src/index.js';
+import { createLocalStorageProvider, LocalStorageCorruptError } from '../src/index.js';
 
 interface TestItem {
   id: string;
@@ -138,5 +138,36 @@ describe('createLocalStorageProvider', () => {
 
   it('throws on getOne for missing item', async () => {
     await expect(provider.getOne('nonexistent')).rejects.toThrow('Item not found');
+  });
+
+  describe('a corrupt stored value', () => {
+    const corrupt = '{not json';
+
+    beforeEach(() => {
+      localStorage.setItem('test-items', corrupt);
+    });
+
+    it('makes reads throw instead of returning an empty collection', async () => {
+      await expect(provider.getList({})).rejects.toBeInstanceOf(LocalStorageCorruptError);
+      await expect(provider.getOne('1')).rejects.toThrow('does not hold a JSON array');
+    });
+
+    it('is never overwritten by a write', async () => {
+      await expect(provider.create({ name: 'New', priority: 1 })).rejects.toBeInstanceOf(LocalStorageCorruptError);
+      await expect(provider.upsert!({ id: 'u1', name: 'New', priority: 1 })).rejects.toBeInstanceOf(LocalStorageCorruptError);
+      await expect(provider.deleteMany(['1'])).rejects.toBeInstanceOf(LocalStorageCorruptError);
+      expect(localStorage.getItem('test-items')).toBe(corrupt);
+    });
+
+    it('carries the key and the raw text on the error', async () => {
+      const err = await provider.getList({}).catch((e) => e);
+      expect(err.storageKey).toBe('test-items');
+      expect(err.raw).toBe(corrupt);
+    });
+
+    it('treats valid JSON that is not an array as corrupt', async () => {
+      localStorage.setItem('test-items', '{"id": "1"}');
+      await expect(provider.getList({})).rejects.toBeInstanceOf(LocalStorageCorruptError);
+    });
   });
 });

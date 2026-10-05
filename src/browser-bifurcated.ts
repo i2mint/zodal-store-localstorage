@@ -96,6 +96,13 @@ export function createBrowserBifurcatedProvider<T extends Record<string, any>>(
     return { meta, content };
   }
 
+  /** The subset of `ids` that name a stored item, in the given order. */
+  async function existing(ids: string[]): Promise<string[]> {
+    const { data } = await metaProvider.getList({});
+    const stored = new Set(data.map(item => String(item[idField])));
+    return ids.filter(id => stored.has(id));
+  }
+
   return {
     async getList(params: GetListParams): Promise<GetListResult<T>> {
       const result = await metaProvider.getList(params);
@@ -140,7 +147,8 @@ export function createBrowserBifurcatedProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
-      return Promise.all(ids.map(id => this.update(id, data)));
+      // Ids with no item are skipped (the DataProvider contract).
+      return Promise.all((await existing(ids)).map(id => this.update(id, data)));
     },
 
     async delete(id: string): Promise<void> {
@@ -149,7 +157,8 @@ export function createBrowserBifurcatedProvider<T extends Record<string, any>>(
     },
 
     async deleteMany(ids: string[]): Promise<void> {
-      await Promise.all(ids.map(id => this.delete(id)));
+      // Ids with no item are skipped (the DataProvider contract).
+      await Promise.all((await existing(ids)).map(id => this.delete(id)));
     },
 
     getCapabilities(): ProviderCapabilities {

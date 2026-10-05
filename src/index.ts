@@ -1,4 +1,4 @@
-export { createLocalStorageProvider } from './provider.js';
+export { createLocalStorageProvider, LocalStorageCorruptError } from './provider.js';
 export type { LocalStorageProviderOptions } from './provider.js';
 
 // IndexedDB content provider (for browser bifurcation)

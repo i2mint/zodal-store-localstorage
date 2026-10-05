@@ -2,12 +2,38 @@
  * localStorage DataProvider for zodal.
  *
  * Stores collection items as a JSON array under a single localStorage key.
- * All query operations (sort, filter, search, pagination) are client-side.
+ * All query operations (sort, filter, search, pagination) are client-side,
+ * through `applyQuery()` from `@zodal/store`.
+ *
+ * A stored value that is not a JSON array is never treated as an empty
+ * collection: every read and write throws {@link LocalStorageCorruptError} and
+ * leaves the stored text untouched, so a corrupt key cannot be silently
+ * overwritten by the next write.
  */
 
-import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
-import { filterToFunction } from '@zodal/store';
+import { applyQuery } from '@zodal/store';
+
+/**
+ * Thrown when the value stored under a provider's key is not a JSON array.
+ * The raw text is left in place (and carried on `raw`) so the app can tell the
+ * user, back it up, or restore it.
+ */
+export class LocalStorageCorruptError extends Error {
+  readonly storageKey: string;
+  readonly raw: string;
+
+  constructor(storageKey: string, raw: string, cause?: unknown) {
+    super(
+      `localStorage key "${storageKey}" does not hold a JSON array; ` +
+        'refusing to read or overwrite it (the stored text is left untouched).',
+      { cause },
+    );
+    this.name = 'LocalStorageCorruptError';
+    this.storageKey = storageKey;
+    this.raw = raw;
+  }
+}
 
 export interface LocalStorageProviderOptions {
   /** localStorage key to store items under. */
@@ -26,12 +52,21 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
   let nextId = Date.now();
 
   function readItems(): T[] {
+    let raw: string | null;
     try {
-      const raw = localStorage.getItem(storageKey);
-      return raw ? JSON.parse(raw) : [];
+      raw = localStorage.getItem(storageKey);
     } catch {
-      return [];
+      return []; // storage unavailable (SSR, blocked): nothing to read, and a write will throw
     }
+    if (!raw) return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      throw new LocalStorageCorruptError(storageKey, raw, err);
+    }
+    if (!Array.isArray(parsed)) throw new LocalStorageCorruptError(storageKey, raw);
+    return parsed as T[];
   }
 
   function writeItems(items: T[]): void {
@@ -42,56 +77,10 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
     return String((item as any)[idField]);
   }
 
-  function matchesSearch(item: T, search: string): boolean {
-    if (!search) return true;
-    const lowerSearch = search.toLowerCase();
-    const fields = searchFields ?? Object.keys(item).filter(k => typeof (item as any)[k] === 'string');
-    return fields.some(field => {
-      const val = (item as any)[field];
-      return typeof val === 'string' && val.toLowerCase().includes(lowerSearch);
-    });
-  }
-
-  function compareValues(a: any, b: any): number {
-    if (a === b) return 0;
-    if (a == null) return -1;
-    if (b == null) return 1;
-    if (typeof a === 'string' && typeof b === 'string') return a.localeCompare(b);
-    return a < b ? -1 : 1;
-  }
-
   return {
     async getList(params: GetListParams): Promise<GetListResult<T>> {
-      let items = readItems();
-
-      if (params.filter) {
-        const predicate = filterToFunction<T>(params.filter);
-        items = items.filter(predicate);
-      }
-
-      if (params.search) {
-        items = items.filter(item => matchesSearch(item, params.search!));
-      }
-
-      const total = items.length;
-
-      if (params.sort && params.sort.length > 0) {
-        items.sort((a, b) => {
-          for (const s of params.sort!) {
-            const cmp = compareValues((a as any)[s.id], (b as any)[s.id]);
-            if (cmp !== 0) return s.desc ? -cmp : cmp;
-          }
-          return 0;
-        });
-      }
-
-      if (params.pagination) {
-        const { page, pageSize } = params.pagination;
-        const start = (page - 1) * pageSize;
-        items = items.slice(start, start + pageSize);
-      }
-
-      return { data: items, total };
+      // Items are parsed fresh from storage on every call, so they are already copies.
+      return applyQuery(readItems(), params, { searchFields });
     },
 
     async getOne(id: string): Promise<T> {
@@ -103,10 +92,16 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
 
     async create(data: Partial<T>): Promise<T> {
       const items = readItems();
-      const newItem = {
-        ...data,
-        [idField]: (data as any)[idField] ?? String(nextId++),
-      } as T;
+      const taken = new Set(items.map(getItemId));
+      const given = (data as any)[idField];
+      if (given != null && taken.has(String(given))) {
+        throw new Error(`Item already exists: ${given}`);
+      }
+      let id = given;
+      if (id == null) {
+        do id = String(nextId++); while (taken.has(id));
+      }
+      const newItem = { ...data, [idField]: id } as T;
       items.push(newItem);
       writeItems(items);
       return { ...newItem };
