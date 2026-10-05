@@ -34,12 +34,12 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@zodal/core": "^0.2.0",
-    "@zodal/store": "^0.2.0"
+    "@zodal/core": "^0.2.1",
+    "@zodal/store": "^0.2.1"
   },
   "devDependencies": {
-    "@zodal/core": "^0.2.0",
-    "@zodal/store": "^0.2.0",
+    "@zodal/core": "^0.2.1",
+    "@zodal/store": "^0.2.1",
     "jsdom": "^26.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",

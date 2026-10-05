@@ -3,7 +3,7 @@
  *
  * Stores collection items as a JSON array under a single key of a `Storage`-like area. All query
  * operations are client-side, done by the `query` function the caller passes: `index.ts` passes
- * one built on `filterToFunction` from `@zodal/store`; the `./lite` entry passes none, so a page
+ * one built on `applyQuery` from `@zodal/store`; the `./lite` entry passes none, so a page
  * with a byte budget does not pull the query engine in (zodal-store-localstorage#11).
  */
 
@@ -242,10 +242,16 @@ export function createLocalCollection<T extends Record<string, any>>(
 
     async create(data: Partial<T>): Promise<T> {
       const items = readItems();
-      const newItem = {
-        ...data,
-        [idField]: (data as any)[idField] ?? String(nextId++),
-      } as T;
+      const taken = new Set(items.map(getItemId));
+      const given = (data as any)[idField];
+      if (given != null && taken.has(String(given))) {
+        throw new Error(`Item already exists: ${given}`);
+      }
+      let id = given;
+      if (id == null) {
+        do id = String(nextId++); while (taken.has(id));
+      }
+      const newItem = { ...data, [idField]: id } as T;
       items.push(newItem);
       writeItems(items);
       return { ...newItem };
