@@ -9,6 +9,7 @@ This package implements `DataProvider<T>` from `@zodal/store`, storing items as 
 - Client-side query through `applyQuery()` from `@zodal/store`
 - `create` with an existing id rejects; `upsert` overwrites
 - `createBrowserBifurcatedProvider` delegates listing to the localStorage provider; its bulk update/delete skip missing ids
+- `src/descriptor.ts` exports a provider descriptor per menu entry (`descriptor` = `localStorage`, `browserBifurcatedDescriptor` = `browserBifurcated`, `indexedDBDescriptor` = `indexedDB` (records), `indexedDBBlobDescriptor` = `indexedDBBlob`; the `./lite` entry has none (a descriptor would pull zod into the byte budget); `createIndexedDBContentProvider` has none, being the blob provider with other defaults), built with `defineProviderDescriptor` from `@zodal/store/descriptor`. `supports()` probes a real localStorage write / an `indexedDB` factory. Keep each options schema in step with its factory's options (validation strips undeclared keys); `create` imports the provider module lazily
 
 ## Skills
 
@@ -24,4 +25,4 @@ pnpm build
 pnpm test
 ```
 
-`tests/contract.test.ts` runs the shared `@zodal/store/testing` conformance kit against the localStorage provider and the browser bifurcated provider with no content fields, and against the IndexedDB records provider over `fake-indexeddb`.
+`tests/contract.test.ts` runs the shared `@zodal/store/testing` conformance kit against the localStorage provider and the browser bifurcated provider with no content fields, and against the IndexedDB records provider over `fake-indexeddb`. `tests/descriptor.test.ts` runs the kit again through `createFromDescriptor`, and checks `supports()`, validation errors, secret/live paths, described vs. reported capabilities, and `bifurcatedDescriptor` composition.
