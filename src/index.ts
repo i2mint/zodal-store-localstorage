@@ -12,3 +12,6 @@ export type { BrowserBifurcatedOptions } from './browser-bifurcated.js';
 // Blob-only provider for cross-backend bifurcation
 export { createIndexedDBBlobProvider } from './blob-provider.js';
 export type { IndexedDBBlobProviderOptions } from './blob-provider.js';
+
+// Provider descriptors (a backend menu: list, configure, check, create by name)
+export { descriptor, browserBifurcatedDescriptor, indexedDBBlobDescriptor } from './descriptor.js';
