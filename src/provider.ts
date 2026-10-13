@@ -33,6 +33,8 @@ export interface LocalStorageProviderOptions {
    * - a function: the text is moved to `${storageKey}.corrupt-${timestamp}`, the function is told
    *   where (so the app can tell the user and offer a restore), and the collection continues empty.
    *   If the text cannot be moved (e.g. storage is full), `CorruptStorageError` is thrown instead.
+   *   The function runs in a microtask, after the operation that found the corruption has finished,
+   *   so it may itself use the provider (e.g. to seed defaults); an error it throws is not caught.
    */
   onCorrupt?: 'throw' | ((info: QuarantineInfo) => void);
 }
@@ -45,10 +47,10 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
   const onCorrupt = options.onCorrupt ?? 'throw';
   let nextId = Date.now();
 
-  /** A missing key is an empty collection; unreadable text goes to `handleCorrupt`, never to `[]`. */
+  /** A missing or empty key is an empty collection; unreadable text goes to `handleCorrupt`, never to `[]`. */
   function readItems(): T[] {
     const raw = localStorage.getItem(storageKey);
-    if (raw === null) return [];
+    if (raw == null || raw === '') return [];
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -61,16 +63,27 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
 
   function handleCorrupt(error: CorruptStorageError): T[] {
     if (onCorrupt === 'throw') throw error;
-    const backupKey = `${storageKey}.corrupt-${Date.now()}`;
+    const report = onCorrupt;
+    const backupKey = freeBackupKey();
     try {
       localStorage.setItem(backupKey, error.raw);
     } catch (cause) {
       // Could not move the text aside, so it must stay where it is: refuse, as 'throw' would.
       throw new CorruptStorageError(storageKey, error.raw, { cause });
     }
-    localStorage.removeItem(storageKey);
-    onCorrupt({ storageKey, backupKey, error });
+    // Remove only the text that was backed up; anything written since (another tab) stays.
+    if (localStorage.getItem(storageKey) === error.raw) localStorage.removeItem(storageKey);
+    // Report after the current operation has written, so a write from the callback is not overwritten.
+    queueMicrotask(() => report({ storageKey, backupKey, error }));
     return [];
+  }
+
+  /** `${storageKey}.corrupt-${timestamp}`, suffixed if that key is taken, so no earlier backup is overwritten. */
+  function freeBackupKey(): string {
+    const base = `${storageKey}.corrupt-${Date.now()}`;
+    let key = base;
+    for (let n = 1; localStorage.getItem(key) !== null; n++) key = `${base}-${n}`;
+    return key;
   }
 
   function writeItems(items: T[]): void {

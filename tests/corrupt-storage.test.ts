@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   createLocalStorageProvider,
+  createBrowserBifurcatedProvider,
   CorruptStorageError,
   StorageQuotaError,
   type QuarantineInfo,
@@ -49,6 +50,19 @@ describe("onCorrupt: 'throw' (default)", () => {
     expect(await provider.getList({})).toEqual({ data: [], total: 0 });
   });
 
+  it('an empty string is an empty collection, not an error', async () => {
+    localStorage.setItem(KEY, '');
+    const provider = createLocalStorageProvider<any>({ storageKey: KEY });
+    expect(await provider.getList({})).toEqual({ data: [], total: 0 });
+  });
+
+  it('createBrowserBifurcatedProvider applies the same policy to its metadata key', async () => {
+    localStorage.setItem(KEY, '{not json');
+    const provider = createBrowserBifurcatedProvider<any>({ storageKey: KEY, contentFields: ['body'] });
+    await expect(provider.getList({})).rejects.toBeInstanceOf(CorruptStorageError);
+    expect(localStorage.getItem(KEY)).toBe('{not json');
+  });
+
   it('an empty array is an empty collection, not an error', async () => {
     localStorage.setItem(KEY, '[]');
     const provider = createLocalStorageProvider<any>({ storageKey: KEY });
@@ -84,6 +98,49 @@ describe('onCorrupt: callback (quarantine)', () => {
 
     expect(onCorrupt).toHaveBeenCalledTimes(1);
     expect(backupKeys()).toHaveLength(1);
+  });
+
+  it('a write made from the callback is kept, not overwritten by the operation that found the corruption', async () => {
+    localStorage.setItem(KEY, '{not json');
+    const provider = createLocalStorageProvider<any>({
+      storageKey: KEY,
+      onCorrupt: () => void provider.create({ id: 'seed' }),
+    });
+
+    await provider.create({ id: 'user' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const ids = JSON.parse(localStorage.getItem(KEY)!).map((i: any) => i.id).sort();
+    expect(ids).toEqual(['seed', 'user']);
+  });
+
+  it('a callback that throws does not fail the operation, and the text is already safe', async () => {
+    localStorage.setItem(KEY, '{not json');
+    const scheduled: (() => void)[] = [];
+    vi.spyOn(globalThis, 'queueMicrotask').mockImplementation(fn => void scheduled.push(fn));
+    const provider = createLocalStorageProvider<any>({
+      storageKey: KEY,
+      onCorrupt: () => {
+        throw new Error('callback bug');
+      },
+    });
+
+    await expect(provider.create({ id: 'user' })).resolves.toMatchObject({ id: 'user' });
+    expect(scheduled).toHaveLength(1);
+    expect(() => scheduled[0]()).toThrow('callback bug');
+    expect(backupKeys().map(k => localStorage.getItem(k))).toEqual(['{not json']);
+  });
+
+  it('two corruptions in the same millisecond keep both backups', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const provider = createLocalStorageProvider<any>({ storageKey: KEY, onCorrupt: () => {} });
+
+    localStorage.setItem(KEY, 'FIRST{');
+    await provider.getList({});
+    localStorage.setItem(KEY, 'SECOND{');
+    await provider.getList({});
+
+    expect(backupKeys().map(k => localStorage.getItem(k)).sort()).toEqual(['FIRST{', 'SECOND{']);
   });
 
   it('throws and leaves the text in place when it cannot be moved aside', async () => {

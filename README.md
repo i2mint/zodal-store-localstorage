@@ -55,7 +55,7 @@ const { data, total } = await provider.getList({
 The whole collection lives under one key and every write rewrites it, so a read that treated unreadable text as an empty collection would let the next write destroy the collection. Instead, a missing key reads as an empty collection, and unreadable text (a partial write, a manual edit, another app using the same key) is handled by `onCorrupt`:
 
 - `'throw'` (default): every read and write throws `CorruptStorageError` (with `storageKey` and the `raw` text) and the key is left exactly as it is.
-- a callback: the text is moved to `${storageKey}.corrupt-${timestamp}`, the callback receives `{ storageKey, backupKey, error }` so the app can tell the user and offer a restore, and the collection continues empty. If the text cannot be moved aside (storage full), `CorruptStorageError` is thrown instead.
+- a callback: the text is moved to `${storageKey}.corrupt-${timestamp}`, the callback receives `{ storageKey, backupKey, error }` so the app can tell the user and offer a restore, and the collection continues empty. If the text cannot be moved aside (storage full), `CorruptStorageError` is thrown instead. The callback runs after the operation that found the corruption, so it may use the provider itself (e.g. to seed defaults); an error it throws is not caught.
 
 ```typescript
 const provider = createLocalStorageProvider<Project>({
@@ -65,6 +65,8 @@ const provider = createLocalStorageProvider<Project>({
 ```
 
 A write refused because storage is full throws `StorageQuotaError`; the previously stored value is unchanged.
+
+Since 0.3.0 reads no longer hide a storage area that cannot be used at all: where `localStorage` is blocked (a sandboxed iframe, storage disabled) or absent (server-side rendering), reads throw as writes always did. Create the provider only where `localStorage` exists.
 
 ## License
 
