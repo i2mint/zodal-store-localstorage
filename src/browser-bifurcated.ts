@@ -28,6 +28,7 @@ interface ContentRef {
   size?: number;
 }
 import { createLocalStorageProvider } from './provider.js';
+import type { LocalStorageProviderOptions } from './provider.js';
 import { createIndexedDBContentProvider } from './indexeddb-content-provider.js';
 
 export interface BrowserBifurcatedOptions {
@@ -45,6 +46,8 @@ export interface BrowserBifurcatedOptions {
   storeName?: string;
   /** How content fields appear in getList. Default: 'reference'. */
   listStrategy?: 'reference' | 'omit';
+  /** What to do when the metadata key holds unreadable text. See `LocalStorageProviderOptions.onCorrupt`. */
+  onCorrupt?: LocalStorageProviderOptions['onCorrupt'];
 }
 
 export function createBrowserBifurcatedProvider<T extends Record<string, any>>(
@@ -56,6 +59,7 @@ export function createBrowserBifurcatedProvider<T extends Record<string, any>>(
     idField = 'id',
     dbName = 'zodal-content',
     storeName = 'content',
+    onCorrupt,
   } = options;
   const contentSet = new Set(contentFields);
 
@@ -63,6 +67,7 @@ export function createBrowserBifurcatedProvider<T extends Record<string, any>>(
     storageKey,
     idField,
     searchFields,
+    onCorrupt,
   });
 
   const contentProvider = createIndexedDBContentProvider<Record<string, any>>({

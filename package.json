@@ -1,6 +1,6 @@
 {
   "name": "@zodal/store-localstorage",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "zodal DataProvider adapter for browser localStorage",
   "type": "module",
   "main": "dist/index.cjs",
