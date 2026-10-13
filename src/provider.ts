@@ -8,6 +8,17 @@
 import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
+import { CorruptStorageError, StorageQuotaError, isQuotaExceededError } from './storage-errors.js';
+
+/** What `onCorrupt` is told after an unreadable collection has been moved aside. */
+export interface QuarantineInfo {
+  /** The collection's key; it no longer exists, so the collection now reads as empty. */
+  storageKey: string;
+  /** The key now holding the unreadable text, exactly as it was stored. */
+  backupKey: string;
+  /** Why the text could not be read. */
+  error: CorruptStorageError;
+}
 
 export interface LocalStorageProviderOptions {
   /** localStorage key to store items under. */
@@ -16,6 +27,16 @@ export interface LocalStorageProviderOptions {
   idField?: string;
   /** Fields to include in text search. Default: all string-valued fields. */
   searchFields?: string[];
+  /**
+   * What to do when the stored text is not a JSON array. The stored text is never overwritten.
+   * - `'throw'` (default): every read and write throws `CorruptStorageError`, leaving the key as it is.
+   * - a function: the text is moved to `${storageKey}.corrupt-${timestamp}`, the function is told
+   *   where (so the app can tell the user and offer a restore), and the collection continues empty.
+   *   If the text cannot be moved (e.g. storage is full), `CorruptStorageError` is thrown instead.
+   *   The function runs in a microtask, after the operation that found the corruption has finished,
+   *   so it may itself use the provider (e.g. to seed defaults); an error it throws is not caught.
+   */
+  onCorrupt?: 'throw' | ((info: QuarantineInfo) => void);
 }
 
 export function createLocalStorageProvider<T extends Record<string, any>>(
@@ -23,19 +44,55 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
 ): DataProvider<T> {
   const { storageKey, searchFields } = options;
   const idField = options.idField ?? 'id';
+  const onCorrupt = options.onCorrupt ?? 'throw';
   let nextId = Date.now();
 
+  /** A missing or empty key is an empty collection; unreadable text goes to `handleCorrupt`, never to `[]`. */
   function readItems(): T[] {
+    const raw = localStorage.getItem(storageKey);
+    if (raw == null || raw === '') return [];
+    let parsed: unknown;
     try {
-      const raw = localStorage.getItem(storageKey);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
+      parsed = JSON.parse(raw);
+    } catch (cause) {
+      return handleCorrupt(new CorruptStorageError(storageKey, raw, { cause }));
     }
+    if (!Array.isArray(parsed)) return handleCorrupt(new CorruptStorageError(storageKey, raw));
+    return parsed;
+  }
+
+  function handleCorrupt(error: CorruptStorageError): T[] {
+    if (onCorrupt === 'throw') throw error;
+    const report = onCorrupt;
+    const backupKey = freeBackupKey();
+    try {
+      localStorage.setItem(backupKey, error.raw);
+    } catch (cause) {
+      // Could not move the text aside, so it must stay where it is: refuse, as 'throw' would.
+      throw new CorruptStorageError(storageKey, error.raw, { cause });
+    }
+    // Remove only the text that was backed up; anything written since (another tab) stays.
+    if (localStorage.getItem(storageKey) === error.raw) localStorage.removeItem(storageKey);
+    // Report after the current operation has written, so a write from the callback is not overwritten.
+    queueMicrotask(() => report({ storageKey, backupKey, error }));
+    return [];
+  }
+
+  /** `${storageKey}.corrupt-${timestamp}`, suffixed if that key is taken, so no earlier backup is overwritten. */
+  function freeBackupKey(): string {
+    const base = `${storageKey}.corrupt-${Date.now()}`;
+    let key = base;
+    for (let n = 1; localStorage.getItem(key) !== null; n++) key = `${base}-${n}`;
+    return key;
   }
 
   function writeItems(items: T[]): void {
-    localStorage.setItem(storageKey, JSON.stringify(items));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(items));
+    } catch (cause) {
+      if (isQuotaExceededError(cause)) throw new StorageQuotaError(storageKey, { cause });
+      throw cause;
+    }
   }
 
   function getItemId(item: T): string {

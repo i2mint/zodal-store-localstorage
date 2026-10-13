@@ -1,5 +1,6 @@
 export { createLocalStorageProvider } from './provider.js';
-export type { LocalStorageProviderOptions } from './provider.js';
+export type { LocalStorageProviderOptions, QuarantineInfo } from './provider.js';
+export { CorruptStorageError, StorageQuotaError, isQuotaExceededError } from './storage-errors.js';
 
 // IndexedDB content provider (for browser bifurcation)
 export { createIndexedDBContentProvider } from './indexeddb-content-provider.js';
