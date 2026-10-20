@@ -47,6 +47,10 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
   const onCorrupt = options.onCorrupt ?? 'throw';
   let nextId = Date.now();
 
+  function isRecord(entry: unknown): boolean {
+    return typeof entry === 'object' && entry !== null && !Array.isArray(entry);
+  }
+
   /** A missing or empty key is an empty collection; unreadable text goes to `handleCorrupt`, never to `[]`. */
   function readItems(): T[] {
     const raw = localStorage.getItem(storageKey);
@@ -57,8 +61,11 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
     } catch (cause) {
       return handleCorrupt(new CorruptStorageError(storageKey, raw, { cause }));
     }
-    if (!Array.isArray(parsed)) return handleCorrupt(new CorruptStorageError(storageKey, raw));
-    return parsed;
+    // An entry that is not an object (`[1, null, {...}]`) is someone else's data under this key too.
+    if (!Array.isArray(parsed) || !parsed.every(isRecord)) {
+      return handleCorrupt(new CorruptStorageError(storageKey, raw));
+    }
+    return parsed as T[];
   }
 
   function handleCorrupt(error: CorruptStorageError): T[] {

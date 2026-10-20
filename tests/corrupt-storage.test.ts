@@ -8,7 +8,7 @@ import {
 } from '../src/index.js';
 
 const KEY = 'corrupt-test';
-const CORRUPT_VALUES = ['{not json', '{"id":"1"}', 'null', '42', '"text"'];
+const CORRUPT_VALUES = ['{not json', '{"id":"1"}', 'null', '42', '"text"', '[1,null,{"id":"a"}]', '[[]]', '["a"]'];
 
 function backupKeys(): string[] {
   return Object.keys(localStorage).filter(k => k.startsWith(`${KEY}.corrupt-`));

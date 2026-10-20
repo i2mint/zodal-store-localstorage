@@ -16,7 +16,7 @@ export class CorruptStorageError extends Error {
 
   constructor(storageKey: string, raw: string, options?: { cause?: unknown }) {
     super(
-      `localStorage key ${JSON.stringify(storageKey)} does not hold a JSON array; ` +
+      `localStorage key ${JSON.stringify(storageKey)} does not hold a JSON array of objects; ` +
         `refusing to read or write it so the stored text is not overwritten`,
       options,
     );
