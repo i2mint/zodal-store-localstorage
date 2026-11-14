@@ -1,5 +1,15 @@
-export { createLocalStorageProvider } from './provider.js';
-export type { LocalStorageProviderOptions, QuarantineInfo } from './provider.js';
+export { createLocalStorageProvider } from './full.js';
+export { createLocalCollection } from './provider.js';
+export type {
+  LocalStorageProviderOptions,
+  LocalStorageProvider,
+  QuarantineInfo,
+  QueryFn,
+  StorageStatusChannel,
+} from './provider.js';
+export { defaultQuery } from './query.js';
+export { createMemoryStorage, probeLocalStorage } from './storage-area.js';
+export type { StorageLike, StorageStatus } from './storage-area.js';
 export { CorruptStorageError, StorageQuotaError, isQuotaExceededError } from './storage-errors.js';
 
 // IndexedDB content provider (for browser bifurcation)

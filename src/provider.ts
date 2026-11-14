@@ -1,14 +1,19 @@
 /**
- * localStorage DataProvider for zodal.
+ * The localStorage collection, without a query engine.
  *
- * Stores collection items as a JSON array under a single localStorage key.
- * All query operations (sort, filter, search, pagination) are client-side.
+ * Stores collection items as a JSON array under a single key of a `Storage`-like area. All query
+ * operations are client-side, done by the `query` function the caller passes: `index.ts` passes
+ * one built on `filterToFunction` from `@zodal/store`; the `./lite` entry passes none, so a page
+ * with a byte budget does not pull the query engine in (zodal-store-localstorage#11).
  */
 
-import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
-import { filterToFunction } from '@zodal/store';
 import { CorruptStorageError, StorageQuotaError, isQuotaExceededError } from './storage-errors.js';
+import { createMemoryStorage, createStatusChannel, probeLocalStorage } from './storage-area.js';
+import type { StorageLike, StorageStatus } from './storage-area.js';
+
+/** Applies a `getList`'s filter, search, sort and pagination to the stored items. */
+export type QueryFn<T> = (items: T[], params: GetListParams, options: { searchFields?: string[] }) => GetListResult<T>;
 
 /** What `onCorrupt` is told after an unreadable collection has been moved aside. */
 export interface QuarantineInfo {
@@ -37,15 +42,59 @@ export interface LocalStorageProviderOptions {
    *   so it may itself use the provider (e.g. to seed defaults); an error it throws is not caught.
    */
   onCorrupt?: 'throw' | ((info: QuarantineInfo) => void);
+  /**
+   * The storage area. Default: `globalThis.localStorage`, after a probe write; when it is missing,
+   * blocked or refuses writes, see `fallback`. An injected area is used as-is (no probe).
+   */
+  storage?: StorageLike;
+  /**
+   * When `localStorage` cannot be used: `'memory'` (default) keeps the collection in memory for
+   * this page (nothing survives a reload) and says so through `status()`; `'throw'` refuses.
+   */
+  fallback?: 'memory' | 'throw';
 }
 
-export function createLocalStorageProvider<T extends Record<string, any>>(
+/** The provider's storage status channel (see {@link StorageStatus}). */
+export interface StorageStatusChannel {
+  /** Which storage is in use, and whether a write was not kept. */
+  status(): StorageStatus;
+  /** Listen to status changes (fallback in use, a write not kept, acknowledged); returns an unsubscribe. */
+  onStatus(listener: (status: StorageStatus) => void): () => void;
+  /** Clear `unsavedWrite` once the user has been told. */
+  acknowledge(): void;
+}
+
+/** The provider type: a `DataProvider` plus the storage status channel. */
+export type LocalStorageProvider<T> = DataProvider<T> & StorageStatusChannel;
+
+/** Build the collection with a given query function (or none: filter, search and sort then throw). */
+export function createLocalCollection<T extends Record<string, any>>(
   options: LocalStorageProviderOptions,
-): DataProvider<T> {
+  query?: QueryFn<T>,
+): LocalStorageProvider<T> {
   const { storageKey, searchFields } = options;
   const idField = options.idField ?? 'id';
   const onCorrupt = options.onCorrupt ?? 'throw';
   let nextId = Date.now();
+
+  let initial: StorageStatus;
+  let localStorage: StorageLike;
+  if (options.storage) {
+    localStorage = options.storage;
+    initial = { backend: 'custom' };
+  } else {
+    const probe = probeLocalStorage();
+    if (probe.storage) {
+      localStorage = probe.storage;
+      initial = { backend: 'localStorage' };
+    } else if ((options.fallback ?? 'memory') === 'memory') {
+      localStorage = createMemoryStorage();
+      initial = { backend: 'memory', fallbackReason: probe.reason };
+    } else {
+      throw new Error(`createLocalStorageProvider: ${probe.reason} (fallback: 'throw')`);
+    }
+  }
+  const channel = createStatusChannel(initial);
 
   function isRecord(entry: unknown): boolean {
     return typeof entry === 'object' && entry !== null && !Array.isArray(entry);
@@ -97,7 +146,11 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
     try {
       localStorage.setItem(storageKey, JSON.stringify(items));
     } catch (cause) {
-      if (isQuotaExceededError(cause)) throw new StorageQuotaError(storageKey, { cause });
+      if (isQuotaExceededError(cause)) {
+        const error = new StorageQuotaError(storageKey, { cause });
+        channel.set({ ...channel.get(), unsavedWrite: error });
+        throw error;
+      }
       throw cause;
     }
   }
@@ -106,56 +159,27 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
     return String((item as any)[idField]);
   }
 
-  function matchesSearch(item: T, search: string): boolean {
-    if (!search) return true;
-    const lowerSearch = search.toLowerCase();
-    const fields = searchFields ?? Object.keys(item).filter(k => typeof (item as any)[k] === 'string');
-    return fields.some(field => {
-      const val = (item as any)[field];
-      return typeof val === 'string' && val.toLowerCase().includes(lowerSearch);
-    });
-  }
-
-  function compareValues(a: any, b: any): number {
-    if (a === b) return 0;
-    if (a == null) return -1;
-    if (b == null) return 1;
-    if (typeof a === 'string' && typeof b === 'string') return a.localeCompare(b);
-    return a < b ? -1 : 1;
-  }
-
   return {
+    status: () => channel.get(),
+    onStatus: (listener) => channel.subscribe(listener),
+    acknowledge() {
+      const { unsavedWrite: _dropped, ...rest } = channel.get();
+      channel.set(rest);
+    },
+
     async getList(params: GetListParams): Promise<GetListResult<T>> {
-      let items = readItems();
-
-      if (params.filter) {
-        const predicate = filterToFunction<T>(params.filter);
-        items = items.filter(predicate);
+      const items = readItems();
+      if (query) return query(items, params, searchFields ? { searchFields } : {});
+      if (params.filter || params.search || (params.sort && params.sort.length > 0)) {
+        throw new Error(
+          'This localStorage provider was built without a query engine (the ./lite entry): ' +
+            'filter, search and sort are not available; import createLocalStorageProvider from the main entry for them',
+        );
       }
-
-      if (params.search) {
-        items = items.filter(item => matchesSearch(item, params.search!));
-      }
-
-      const total = items.length;
-
-      if (params.sort && params.sort.length > 0) {
-        items.sort((a, b) => {
-          for (const s of params.sort!) {
-            const cmp = compareValues((a as any)[s.id], (b as any)[s.id]);
-            if (cmp !== 0) return s.desc ? -cmp : cmp;
-          }
-          return 0;
-        });
-      }
-
-      if (params.pagination) {
-        const { page, pageSize } = params.pagination;
-        const start = (page - 1) * pageSize;
-        items = items.slice(start, start + pageSize);
-      }
-
-      return { data: items, total };
+      if (!params.pagination) return { data: items, total: items.length };
+      const { page, pageSize } = params.pagination;
+      const start = (page - 1) * pageSize;
+      return { data: items.slice(start, start + pageSize), total: items.length };
     },
 
     async getOne(id: string): Promise<T> {
@@ -240,6 +264,8 @@ export function createLocalStorageProvider<T extends Record<string, any>>(
         serverFilter: false,
         serverSearch: false,
         serverPagination: false,
+        // Without a query engine (./lite) no filter operator is available.
+        ...(query ? {} : { filterOperators: { '*': [] } }),
       };
     },
   };

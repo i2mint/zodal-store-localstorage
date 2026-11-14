@@ -27,7 +27,7 @@ interface ContentRef {
   mimeType?: string;
   size?: number;
 }
-import { createLocalStorageProvider } from './provider.js';
+import { createLocalStorageProvider } from './full.js';
 import type { LocalStorageProviderOptions } from './provider.js';
 import { createIndexedDBContentProvider } from './indexeddb-content-provider.js';
 
