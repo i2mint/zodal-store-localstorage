@@ -50,6 +50,17 @@ const { data, total } = await provider.getList({
 | `searchFields` | `string[]` | all string fields | Fields to include in text search |
 | `onCorrupt` | `'throw' \| (info) => void` | `'throw'` | What to do when the key holds text that is not a JSON array of objects (see below) |
 
+## Records in IndexedDB (`createIndexedDBProvider`)
+
+When a collection outgrows localStorage (one JSON string per collection, about 5 MB per origin), keep each item as its own IndexedDB record:
+
+```ts
+const notes = createIndexedDBProvider<Note>({ dbName: 'app', storeName: 'notes', allStores: ['notes', 'tags'] });
+const tags = createIndexedDBProvider<Tag>({ dbName: 'app', storeName: 'tags', allStores: ['notes', 'tags'] });
+```
+
+IndexedDB creates object stores only when a database opens at a new version, so declare every store of a database (`allStores`) in each provider that opens it (a missing one bumps the version once). Writes resolve when their transaction commits; a failed write keeps nothing. The connection reopens after the browser closes it. Filter, search and sort run client-side (capabilities say so). Inject `indexedDB` (e.g. `fake-indexeddb`) in tests.
+
 ## When storage is missing, blocked or full
 
 `createLocalStorageProvider` probes `localStorage` with a write. When it is missing (a sandboxed iframe), blocked (`SecurityError`) or refuses writes, the collection lives in memory for this page instead (`fallback: 'memory'`, the default; `'throw'` refuses), and the provider says so:

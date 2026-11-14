@@ -23,3 +23,7 @@ export type { BrowserBifurcatedOptions } from './browser-bifurcated.js';
 // Blob-only provider for cross-backend bifurcation
 export { createIndexedDBBlobProvider } from './blob-provider.js';
 export type { IndexedDBBlobProviderOptions } from './blob-provider.js';
+
+// IndexedDB records provider (items, not blobs)
+export { createIndexedDBProvider } from './indexeddb-provider.js';
+export type { IndexedDBProviderOptions } from './indexeddb-provider.js';
