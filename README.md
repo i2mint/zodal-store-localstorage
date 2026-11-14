@@ -61,6 +61,21 @@ const tags = createIndexedDBProvider<Tag>({ dbName: 'app', storeName: 'tags', al
 
 IndexedDB creates object stores only when a database opens at a new version, so declare every store of a database (`allStores`) in each provider that opens it (a missing one bumps the version once). Writes resolve when their transaction commits; a failed write keeps nothing. The connection reopens after the browser closes it. Filter, search and sort run client-side (capabilities say so). Inject `indexedDB` (e.g. `fake-indexeddb`) in tests.
 
+## A page with no build step
+
+`dist/zodal-store-localstorage.iife.js` is the `./lite` provider in one self-contained file (about 4.5 kB, 2 kB gzipped), defining the global `ZodalStoreLocalStorage`. Load it from a CDN, or have a page generator inline it, so a generated static page keeps the same storage seam as an app:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@zodal/store-localstorage/dist/zodal-store-localstorage.iife.js"></script>
+<script>
+  const drafts = ZodalStoreLocalStorage.createLocalStorageProvider({ storageKey: 'paces.draft' });
+  drafts.upsert({ id: 'answers', ...collect() });          // survives a reload
+  if (drafts.status().backend === 'memory') warn('This draft will not be kept');
+</script>
+```
+
+It has everything the lite entry has (CRUD, upsert, pagination, the memory fallback, the status channel), and no query engine.
+
 ## When storage is missing, blocked or full
 
 `createLocalStorageProvider` probes `localStorage` with a write. When it is missing (a sandboxed iframe), blocked (`SecurityError`) or refuses writes, the collection lives in memory for this page instead (`fallback: 'memory'`, the default; `'throw'` refuses), and the provider says so:

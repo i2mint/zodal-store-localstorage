@@ -12,6 +12,7 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./iife": "./dist/zodal-store-localstorage.iife.js",
     "./lite": {
       "types": "./dist/lite.d.ts",
       "import": "./dist/lite.js",
@@ -19,6 +20,8 @@
     }
   },
   "sideEffects": false,
+  "unpkg": "./dist/zodal-store-localstorage.iife.js",
+  "jsdelivr": "./dist/zodal-store-localstorage.iife.js",
   "publishConfig": {
     "access": "public"
   },
