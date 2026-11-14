@@ -7,7 +7,7 @@
  * corrupt-storage handling) is the same as the main entry.
  */
 
-export { createLocalCollection as createLocalStorageProvider } from './provider.js';
+export { createLocalCollection as createLocalStorageProvider, WriteConflictError } from './provider.js';
 export type {
   LocalStorageProvider,
   LocalStorageProviderOptions,

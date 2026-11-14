@@ -76,6 +76,10 @@ IndexedDB creates object stores only when a database opens at a new version, so 
 
 It has everything the lite entry has (CRUD, upsert, pagination, the memory fallback, the status channel), and no query engine.
 
+## Batches and conditional writes
+
+`upsertMany(items)` inserts or replaces a whole page in one write of the collection (a tiered cache admitting a list uses it). `getVersioned(id)` / `updateIfVersion(id, patch, version)` / `deleteIfVersion(id, version)` write only if nobody changed the item since it was read; a lost race rejects with `WriteConflictError` (named `WriteConflict`, so `isWriteConflict` from `@zodal/store` matches it). The version is a hash of the stored item, so a change from another tab is seen; the read-compare-write is one synchronous step within a tab, not a lock across tabs.
+
 ## When storage is missing, blocked or full
 
 `createLocalStorageProvider` probes `localStorage` with a write. When it is missing (a sandboxed iframe), blocked (`SecurityError`) or refuses writes, the collection lives in memory for this page instead (`fallback: 'memory'`, the default; `'throw'` refuses), and the provider says so:
