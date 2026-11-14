@@ -27,3 +27,6 @@ export type { IndexedDBBlobProviderOptions } from './blob-provider.js';
 // IndexedDB records provider (items, not blobs)
 export { createIndexedDBProvider } from './indexeddb-provider.js';
 export type { IndexedDBProviderOptions } from './indexeddb-provider.js';
+
+// Provider descriptors (a backend menu: list, configure, check, create by name)
+export { descriptor, browserBifurcatedDescriptor, indexedDBBlobDescriptor, indexedDBDescriptor } from './descriptor.js';

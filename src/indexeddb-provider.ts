@@ -11,7 +11,7 @@
  * - Writes resolve when their transaction commits, not when the request succeeds.
  * - The connection reopens after the browser closes it (mobile browsers do, and so does a
  *   version change from another tab).
- * - Filter (`filterToFunction` from `@zodal/store`), search and sort run client-side; the
+ * - Filter, search and sort run client-side (`applyQuery` from `@zodal/store`); the
  *   capabilities say so.
  */
 
