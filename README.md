@@ -50,6 +50,22 @@ const { data, total } = await provider.getList({
 | `searchFields` | `string[]` | all string fields | Fields to include in text search |
 | `onCorrupt` | `'throw' \| (info) => void` | `'throw'` | What to do when the key holds text that is not a JSON array of objects (see below) |
 
+## When storage is missing, blocked or full
+
+`createLocalStorageProvider` probes `localStorage` with a write. When it is missing (a sandboxed iframe), blocked (`SecurityError`) or refuses writes, the collection lives in memory for this page instead (`fallback: 'memory'`, the default; `'throw'` refuses), and the provider says so:
+
+```ts
+const views = createLocalStorageProvider({ storageKey: 'app.views' });
+views.status();      // { backend: 'localStorage' | 'memory' | 'custom', fallbackReason?, unsavedWrite? }
+views.onStatus((s) => s.backend === 'memory' && banner('Your views will not be kept after you leave'));
+// a full storage area: the write rejects with StorageQuotaError and status().unsavedWrite is set
+views.acknowledge(); // clears unsavedWrite once the user has been told
+```
+
+Inject any `Storage`-like area with `storage` (`sessionStorage`, `createMemoryStorage()` in tests); it is used as-is.
+
+**A smaller entry.** `@zodal/store-localstorage/lite` is the same provider without the query engine (no `@zodal/store` runtime import): CRUD, upsert, pagination, the fallback and the status channel. A filter, search or sort throws, and its capabilities declare no filter operators.
+
 ## Unreadable storage is never overwritten
 
 The whole collection lives under one key and every write rewrites it, so a read that treated unreadable text as an empty collection would let the next write destroy the collection. Instead, a missing key reads as an empty collection, and unreadable text (a partial write, a manual edit, another app using the same key, an array with an entry that is not an object) is handled by `onCorrupt`:
