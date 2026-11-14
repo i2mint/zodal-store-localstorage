@@ -12,6 +12,47 @@ import { CorruptStorageError, StorageQuotaError, isQuotaExceededError } from './
 import { createMemoryStorage, createStatusChannel, probeLocalStorage } from './storage-area.js';
 import type { StorageLike, StorageStatus } from './storage-area.js';
 
+/**
+ * A conditional write lost (zodal#118). Named `WriteConflict` so `isWriteConflict` from
+ * `@zodal/store` recognises it; declared here because the `@zodal/store` on npm predates it.
+ */
+export class WriteConflictError extends Error {
+  override name = 'WriteConflict';
+  constructor(
+    readonly id: string,
+    readonly expected: string | number,
+    readonly actual: string | number | undefined,
+  ) {
+    super(
+      actual === undefined
+        ? `Write conflict on ${JSON.stringify(id)}: it was deleted since version ${JSON.stringify(expected)} was read`
+        : `Write conflict on ${JSON.stringify(id)}: expected version ${JSON.stringify(expected)}, found ${JSON.stringify(actual)}`,
+    );
+  }
+}
+
+/** JSON with sorted object keys, so key order does not change a version. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_k, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, (v as Record<string, unknown>)[k]]))
+      : v,
+  );
+}
+
+/** A content version: FNV-1a (64-bit, as two 32-bit halves) of the item's stable JSON. */
+function contentVersion(item: unknown): string {
+  const text = stableJson(item);
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x5bd1e995) >>> 0;
+  }
+  return `v${h1.toString(36)}${h2.toString(36)}`;
+}
+
 /** Applies a `getList`'s filter, search, sort and pagination to the stored items. */
 export type QueryFn<T> = (items: T[], params: GetListParams, options: { searchFields?: string[] }) => GetListResult<T>;
 
@@ -65,7 +106,17 @@ export interface StorageStatusChannel {
 }
 
 /** The provider type: a `DataProvider` plus the storage status channel. */
-export type LocalStorageProvider<T> = DataProvider<T> & StorageStatusChannel;
+export type LocalStorageProvider<T> = DataProvider<T> &
+  StorageStatusChannel & {
+    /** Insert or replace several items in one write (`DataProvider.upsertMany`). */
+    upsertMany(data: T[]): Promise<T[]>;
+    /** An item with its content version (`DataProvider.getVersioned`). */
+    getVersioned(id: string): Promise<{ item: T; version: string }>;
+    /** Merge `data` only if the item is still at `expected`; else a `WriteConflictError`. */
+    updateIfVersion(id: string, data: Partial<T>, expected: string | number): Promise<{ item: T; version: string }>;
+    /** Delete only if the item is still at `expected`; else a `WriteConflictError`. */
+    deleteIfVersion(id: string, expected: string | number): Promise<void>;
+  };
 
 /** Build the collection with a given query function (or none: filter, search and sort then throw). */
 export function createLocalCollection<T extends Record<string, any>>(
@@ -252,8 +303,58 @@ export function createLocalCollection<T extends Record<string, any>>(
       return { ...item };
     },
 
+    /** Insert or replace several items in ONE write of the collection (zodal#122). */
+    async upsertMany(data: T[]): Promise<T[]> {
+      const items = readItems();
+      const positions = new Map(items.map((i, index) => [getItemId(i), index]));
+      const out = data.map((d) => {
+        const item = { ...d };
+        const id = getItemId(item);
+        const index = positions.get(id);
+        if (index === undefined) {
+          positions.set(id, items.length);
+          items.push(item);
+        } else {
+          items[index] = item;
+        }
+        return { ...item };
+      });
+      writeItems(items);
+      return out;
+    },
+
+    // Conditional writes (zodal#118). The version is a hash of the stored item, so a write from
+    // anywhere (another tab, another provider over the same key) changes it, and nothing extra
+    // is stored. Read, compare and write happen in one synchronous step within this tab.
+    async getVersioned(id: string): Promise<{ item: T; version: string }> {
+      const item = readItems().find((i) => getItemId(i) === id);
+      if (!item) throw new Error(`Item not found: ${id}`);
+      return { item: { ...item }, version: contentVersion(item) };
+    },
+
+    async updateIfVersion(id: string, data: Partial<T>, expected: string | number): Promise<{ item: T; version: string }> {
+      const items = readItems();
+      const index = items.findIndex((i) => getItemId(i) === id);
+      const current = index === -1 ? undefined : contentVersion(items[index]!);
+      if (current !== expected) throw new WriteConflictError(id, expected, current);
+      items[index] = { ...items[index]!, ...data };
+      writeItems(items);
+      return { item: { ...items[index]! }, version: contentVersion(items[index]!) };
+    },
+
+    async deleteIfVersion(id: string, expected: string | number): Promise<void> {
+      const items = readItems();
+      const index = items.findIndex((i) => getItemId(i) === id);
+      const current = index === -1 ? undefined : contentVersion(items[index]!);
+      if (current !== expected) throw new WriteConflictError(id, expected, current);
+      items.splice(index, 1);
+      writeItems(items);
+    },
+
     getCapabilities(): ProviderCapabilities {
       return {
+        // `versioned` is declared structurally: the @zodal/store on npm predates the field.
+        ...({ versioned: true } as Partial<ProviderCapabilities>),
         canCreate: true,
         canUpdate: true,
         canDelete: true,

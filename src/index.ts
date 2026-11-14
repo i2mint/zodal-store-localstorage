@@ -1,5 +1,5 @@
 export { createLocalStorageProvider } from './full.js';
-export { createLocalCollection } from './provider.js';
+export { createLocalCollection, WriteConflictError } from './provider.js';
 export type {
   LocalStorageProviderOptions,
   LocalStorageProvider,
